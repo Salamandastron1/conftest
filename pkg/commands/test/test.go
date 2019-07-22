@@ -40,53 +40,118 @@ func NewTestCommand() *cobra.Command {
 		Short:   "Test your configuration files using Open Policy Agent",
 		Version: fmt.Sprintf("Version: %s\nCommit: %s\nDate: %s\n", constants.Version, constants.Commit, constants.Date),
 
-		Run: func(cmd *cobra.Command, args []string) {
-			ctx := context.Background()
+		Run: TestFunction}
 
-			if len(args) < 1 {
-				cmd.SilenceErrors = true
-				log.G(ctx).Fatal("The first argument should be a file")
-			}
-
-			if viper.GetBool("update") {
-				update.NewUpdateCommand().Run(cmd, args)
-			}
-
-			compiler, err := buildCompiler(viper.GetString("policy"))
-			if err != nil {
-				log.G(ctx).Fatalf("Problem building rego compiler: %s", err)
-			}
-
-			foundFailures := false
-			for _, fileName := range args {
-				if fileName != "-" {
-					fmt.Println(fileName)
-				}
-				failures, warnings := processFile(ctx, fileName, compiler)
-				if failures != nil {
-					foundFailures = true
-					printErrors(failures, aurora.RedFg)
-				}
-				if warnings != nil {
-					if viper.GetBool("fail-on-warn") {
-						foundFailures = true
-					}
-					printErrors(warnings, aurora.BrownFg)
-				}
-			}
-			if foundFailures {
-				os.Exit(1)
-			}
-		},
-	}
-
+	cmd.Flags().BoolP("cross-ref", "c", false, "enable cross-file references")
 	cmd.Flags().BoolP("fail-on-warn", "", false, "return a non-zero exit code if only warnings are found")
 	cmd.Flags().BoolP("update", "", false, "update any policies before running the tests")
 
+	viper.BindPFlag("cross-ref", cmd.Flags().Lookup("cross-ref"))
 	viper.BindPFlag("fail-on-warn", cmd.Flags().Lookup("fail-on-warn"))
 	viper.BindPFlag("update", cmd.Flags().Lookup("update"))
 
 	return cmd
+}
+
+func TestFunction(cmd *cobra.Command, args []string) {
+	ctx := context.Background()
+
+	if len(args) < 1 {
+		cmd.SilenceErrors = true
+		log.G(ctx).Fatal("The first argument should be a file")
+	}
+
+	if viper.GetBool("update") {
+		update.NewUpdateCommand().Run(cmd, args)
+	}
+
+	compiler, err := buildCompiler(viper.GetString("policy"))
+	if err != nil {
+		log.G(ctx).Fatalf("Problem building rego compiler: %s", err)
+	}
+
+	foundFailures := false
+	if viper.GetBool("cross-ref") {
+		filesToBeTested, err := concatFiles(args)
+
+		if err != nil {
+			log.G(ctx).Fatalf("Problem combining YAML files; error is:\n%s", err)
+		}
+
+		parser := parser.GetParser("test.yaml")
+
+		var input interface{}
+		err = parser.Unmarshal([]byte(filesToBeTested), &input)
+		if err != nil {
+			log.G(ctx).Fatalf("Problem unmarshalling YAML; error is:\n%s", err)
+		}
+
+		failures, warnings := processData(ctx, input, compiler)
+
+		if failures != nil {
+			foundFailures = true
+			printErrors(failures, aurora.RedFg)
+		}
+		if warnings != nil {
+			if viper.GetBool("fail-on-warn") {
+				foundFailures = true
+			}
+			printErrors(warnings, aurora.BrownFg)
+		}
+
+	} else {
+		foundFailures = loopOverFiles(ctx, args, compiler)
+	}
+
+	if foundFailures {
+		os.Exit(1)
+	}
+}
+
+func concatFiles(args []string) (string, error) {
+	var concatFile []byte
+	for index, file := range args {
+		output, err := ioutil.ReadFile(file)
+
+		if err != nil {
+			return "", err
+		}
+
+		bytes.TrimSpace(output)
+		if index != (len(args) - 1) {
+			output = append(output, []byte("\n")...)
+		}
+		linebreak := detectLineBreak(output)
+
+		bits := bytes.Split(output, []byte("---"+linebreak))
+		for _, subDoc := range bits {
+			concatFile = append(concatFile, subDoc...)
+		}
+	}
+
+	return string(bytes.TrimSpace(concatFile)), nil
+}
+
+func loopOverFiles(ctx context.Context, args []string, compiler *ast.Compiler) bool {
+	foundFailures := false
+	for _, fileName := range args {
+		if fileName != "-" {
+			fmt.Println(fileName)
+		}
+		failures, warnings := processFile(ctx, fileName, compiler)
+		if failures != nil {
+			foundFailures = true
+			printErrors(failures, aurora.RedFg)
+		}
+		if warnings != nil {
+			if viper.GetBool("fail-on-warn") {
+				foundFailures = true
+			}
+			printErrors(warnings, aurora.BrownFg)
+		}
+	}
+
+	return foundFailures
 }
 
 func buildRego(trace bool, query string, input interface{}, compiler *ast.Compiler) (*rego.Rego, *topdown.BufferTracer) {
