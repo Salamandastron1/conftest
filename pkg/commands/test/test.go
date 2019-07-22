@@ -32,6 +32,48 @@ var (
 	warnQ = regexp.MustCompile("^warn(_[a-zA-Z]+)*$")
 )
 
+//RunTestCommand - this is a function which can execute tests given test files and a policy
+func RunTestCommand(combineFilesFlag, failOnWarnFlag, updateFlag bool, policy string, args []string, cmd *cobra.Command) error {
+	ctx := context.Background()
+
+	if len(args) < 1 {
+		cmd.SilenceErrors = true
+		log.G(ctx).Fatal("The first argument should be a file")
+	}
+
+	if updateFlag {
+		update.NewUpdateCommand().Run(cmd, args)
+	}
+
+	compiler, err := buildCompiler(policy)
+	if err != nil {
+		log.G(ctx).Fatalf("Problem building rego compiler: %s", err)
+	}
+	var failures, warnings error
+	foundFailures := false
+	for _, fileName := range args {
+		if fileName != "-" {
+			fmt.Println(fileName)
+		}
+		failures, warnings = processFile(ctx, fileName, compiler)
+		if failures != nil {
+			foundFailures = true
+			printErrors(failures, aurora.RedFg)
+		}
+		if warnings != nil {
+			if failOnWarnFlag {
+				foundFailures = true
+			}
+			printErrors(warnings, aurora.BrownFg)
+		}
+	}
+	if foundFailures {
+		return fmt.Errorf("error when running test command: \n FAILURES: %v \n WARNINGS: %v", failures, warnings)
+	}
+
+	return nil
+}
+
 // NewTestCommand creates a new test command
 func NewTestCommand() *cobra.Command {
 

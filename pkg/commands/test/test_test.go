@@ -1,6 +1,10 @@
 package test
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/spf13/viper"
+)
 
 func TestWarnQuerry(t *testing.T) {
 
@@ -28,8 +32,8 @@ func TestWarnQuerry(t *testing.T) {
 }
 
 func TestCommandTest(t *testing.T) {
+	testCommand := NewTestCommand()
 	t.Run("Test command has all required flags", func(t *testing.T) {
-		testCommand := NewTestCommand()
 		expectedFlags := []string{
 			"fail-on-warn",
 			"update",
@@ -40,6 +44,46 @@ func TestCommandTest(t *testing.T) {
 				t.Errorf("we are missing an expected flag: %s", flag)
 			}
 		}
+	})
+	t.Run("given a policy with rules and samples config files with populated objects", func(t *testing.T) {
+		t.Run("when combine-files flag is true", func(t *testing.T) {
+			combineFiles := true
+			failOnWarn := true
+			update := false
+			policyFilePath := "testdata/policy"
+			viper.Set("namespace", "main")
+			t.Run("and there is a single, policy compliant, config file", func(t *testing.T) {
+				err := RunTestCommand(
+					combineFiles,
+					failOnWarn,
+					update,
+					policyFilePath,
+					[]string{"testdata/single_file_complete.tf"},
+					testCommand,
+				)
+				if err != nil {
+					t.Errorf("we should not have recieved an error: %v", err)
+				}
+			})
+
+			t.Run("and there are multiple tf files, policy compliant, config file", func(t *testing.T) {
+				t.Skip("this feature is not yet implemented")
+				err := RunTestCommand(
+					combineFiles,
+					failOnWarn,
+					update,
+					policyFilePath,
+					[]string{
+						"testdata/multi_file_part_1.tf",
+						"testdata/multi_file_part_2.tf",
+					},
+					testCommand,
+				)
+				if err != nil {
+					t.Errorf("we should not have recieved an error: %v", err)
+				}
+			})
+		})
 	})
 
 }
