@@ -4,7 +4,7 @@ import "testing"
 
 func TestWarnQuerry(t *testing.T) {
 
-	tests := []struct{
+	tests := []struct {
 		in  string
 		exp bool
 	}{
@@ -27,9 +27,26 @@ func TestWarnQuerry(t *testing.T) {
 	}
 }
 
+func TestCommandTest(t *testing.T) {
+	t.Run("Test command has all required flags", func(t *testing.T) {
+		testCommand := NewTestCommand()
+		expectedFlags := []string{
+			"fail-on-warn",
+			"update",
+			"combine-files",
+		}
+		for _, flag := range expectedFlags {
+			if nil == testCommand.Flags().Lookup(flag) {
+				t.Errorf("we are missing an expected flag: %s", flag)
+			}
+		}
+	})
+
+}
+
 func TestFailQuery(t *testing.T) {
 
-	tests := []struct{
+	tests := []struct {
 		in  string
 		exp bool
 	}{

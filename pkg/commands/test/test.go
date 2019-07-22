@@ -27,7 +27,6 @@ import (
 	"github.com/spf13/viper"
 )
 
-
 var (
 	denyQ = regexp.MustCompile("^deny(_[a-zA-Z]+)*$")
 	warnQ = regexp.MustCompile("^warn(_[a-zA-Z]+)*$")
@@ -83,6 +82,7 @@ func NewTestCommand() *cobra.Command {
 
 	cmd.Flags().BoolP("fail-on-warn", "", false, "return a non-zero exit code if only warnings are found")
 	cmd.Flags().BoolP("update", "", false, "update any policies before running the tests")
+	cmd.Flags().BoolP("combine-files", "", false, "combine multiple files to be evaluated together by a single policy")
 
 	viper.BindPFlag("fail-on-warn", cmd.Flags().Lookup("fail-on-warn"))
 	viper.BindPFlag("update", cmd.Flags().Lookup("update"))
@@ -153,7 +153,7 @@ func processFile(ctx context.Context, fileName string, compiler *ast.Compiler) (
 }
 
 // finds all queries in the compiler supported by the
-func getRules(ctx context.Context, re *regexp.Regexp, compiler *ast.Compiler) ([]string) {
+func getRules(ctx context.Context, re *regexp.Regexp, compiler *ast.Compiler) []string {
 
 	var res []string
 
@@ -229,7 +229,7 @@ func getAurora() aurora.Aurora {
 }
 
 func printErrors(err error, color aurora.Color) {
-    aur := getAurora()
+	aur := getAurora()
 	if merr, ok := err.(*multierror.Error); ok {
 		for i := range merr.Errors {
 			fmt.Println("  ", aur.Colorize(merr.Errors[i], color))
