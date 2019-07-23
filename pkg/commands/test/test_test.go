@@ -10,6 +10,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/containerd/containerd/log"
+	"github.com/open-policy-agent/opa/ast"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -100,9 +102,6 @@ func Test_Multifile(t *testing.T) {
 
 			TestFunction(cmd, args)
 		})
-		//given an array of file paths, when the flag
-		//exist it should combine the files into the
-		//same namespace in a single object
 		t.Run("given an array of file paths, it should concat all the files", func(t *testing.T) {
 			args := []string{"../../../mockTestData/weather.yaml", "../../../mockTestData/name.yaml"}
 			byteExpected, err := ioutil.ReadFile("../../../mockTestData/concatenated_Files.yaml")
@@ -154,6 +153,56 @@ func Test_Multifile(t *testing.T) {
 				t.Errorf("Expecting Rego to output `%s`; instead got `%s`", expected, result)
 			}
 		})
+		t.Run("Multi-file support", func(t *testing.T) {
+
+			testCommand := NewTestCommand()
+			t.Run("Test command has all required flags", func(t *testing.T) {
+				expectedFlags := []string{
+					"fail-on-warn",
+					"update",
+					"combine-files",
+				}
+				for _, flag := range expectedFlags {
+					if nil == testCommand.Flags().Lookup(flag) {
+						t.Errorf("we are missing an expected flag: %s", flag)
+					}
+				}
+			})
+			t.Run("given a policy with rules and samples config files with populated objects", func(t *testing.T) {
+				t.Run("when combine-files flag is true", func(t *testing.T) {
+
+					t.Run("and there is a single, policy compliant, config file", func(t *testing.T) {
+						_, ctx, compiler := initMulti("../../../mockTestData/tfPolicy")
+						expected := false
+						files := []string{"../../../mockTestData/single_file_complete.tf"}
+						result := loopOverFiles(ctx, files, compiler)
+						if result != expected {
+							t.Errorf("expected %v but got %v", expected, result)
+						}
+					})
+				})
+			})
+			// t.Run("and there are multiple tf files, policy compliant, config file", func(t *testing.T) {
+			// 	t.Skip("this feature is not yet implemented")
+			// 	err := RunTestCommand(
+			// 		combineFiles,
+			// 		failOnWarn,
+			// 		update,
+			// 		policyFilePath,
+			// 		[]string{
+			// 			"testdata/multi_file_part_1.tf",
+			// 			"testdata/multi_file_part_2.tf",
+			// 		},
+			// 		testCommand,
+			// 	)
+			// 	if err != nil {
+			// 		t.Errorf("we should not have recieved an error: %v", err)
+			// 	}
+			// })
+			// 	})
+			// })
+
+		})
 
 		// t.Run("given a concatted file with two same keys, the rego tests run", func(t *testing.T) {
 		// viper.Set("cross-ref", true)
@@ -191,6 +240,21 @@ func initBasic(policy string) (*cobra.Command, []string, context.Context) {
 	args := []string{"../../../mockTestData/name.yaml"}
 
 	return cmd, args, ctx
+}
+
+func initMulti(policy string) (*cobra.Command, context.Context, *ast.Compiler) {
+	cmd := &cobra.Command{}
+	viper.Set("policy", policy)
+	viper.Set("no-color", true)
+	viper.Set("namespace", "main")
+	compiler, err := buildCompiler(policy)
+	ctx := context.Background()
+
+	if err != nil {
+		log.G(ctx).Fatalf("Invalid Policy %s", err)
+	}
+
+	return cmd, ctx, compiler
 }
 
 func executeTestFunction(policy string, extraArgs []string) string {

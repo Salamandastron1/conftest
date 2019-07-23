@@ -45,10 +45,12 @@ func NewTestCommand() *cobra.Command {
 	cmd.Flags().BoolP("cross-ref", "c", false, "enable cross-file references")
 	cmd.Flags().BoolP("fail-on-warn", "", false, "return a non-zero exit code if only warnings are found")
 	cmd.Flags().BoolP("update", "", false, "update any policies before running the tests")
+	cmd.Flags().BoolP("combine-files", "", false, "compares values across multiple files")
 
 	viper.BindPFlag("cross-ref", cmd.Flags().Lookup("cross-ref"))
 	viper.BindPFlag("fail-on-warn", cmd.Flags().Lookup("fail-on-warn"))
 	viper.BindPFlag("update", cmd.Flags().Lookup("update"))
+	viper.BindPFlag("combine-files", cmd.Flags().Lookup("combine-files"))
 
 	return cmd
 }
